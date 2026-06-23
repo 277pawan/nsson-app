@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "965766172969",
+    "project_id": "ns-son-autoparts",
+    "storage_bucket": "ns-son-autoparts.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:965766172969:android:6f4880bff97c57185ba738",
+        "android_client_info": {
+          "package_name": "com.motocrafter.moto_crafter_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBn77O1fdPxarbnu4dSYYB7C8NuU7WZgXg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
