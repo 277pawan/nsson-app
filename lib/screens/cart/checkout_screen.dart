@@ -19,9 +19,7 @@ import '../../core/widgets/animations.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key, this.initialCouponCode});
-
   final String? initialCouponCode;
-
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
@@ -42,14 +40,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _useSavedAddress = false;
   Address? _selectedAddress;
 
-  // ── Coupon state ───────────────────────────────────────────────────────────
   String? _appliedCouponCode;
   String? _appliedCouponId;
   double? _discountAmount;
   double? _finalAmount;
   bool _couponLoading = false;
 
-  // ── Razorpay countdown state ───────────────────────────────────────────────
   Timer? _countdownTimer;
   String? _countdownText;
   DateTime? _paymentExpiry;
@@ -73,6 +69,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           });
         }
       });
+      if (widget.initialCouponCode != null && widget.initialCouponCode!.isNotEmpty) {
+        _applyCoupon();
+      }
     });
   }
 
@@ -89,7 +88,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     super.dispose();
   }
 
-  // ─── Order payload ────────────────────────────────────────────────────────
   Map<String, dynamic> _buildOrderPayload(String paymentMethod) {
     return <String, dynamic>{
       'paymentMethod': paymentMethod,
@@ -110,18 +108,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     };
   }
 
-  // ─── Coupon helpers ───────────────────────────────────────────────────────
   Future<void> _applyCoupon() async {
     final code = _couponCtrl.text.trim().toUpperCase();
     if (code.isEmpty) return;
-
     final cart = context.read<CartProvider>();
     final couponProvider = context.read<CouponProvider>();
     setState(() => _couponLoading = true);
-
     final res = await couponProvider.applyCoupon(code, cart.total);
     if (!mounted) return;
-
     if (res != null && res['success'] == true) {
       final data = res['data'] as Map<String, dynamic>;
       setState(() {
@@ -131,23 +125,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         _finalAmount = _asDouble(data['finalAmount']);
         _couponLoading = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-              'Coupon applied! You save Rs ${_discountAmount?.toStringAsFixed(0) ?? '0'}'),
-          backgroundColor: AppColors.success,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Coupon applied! You save Rs ${_discountAmount?.toStringAsFixed(0) ?? '0'}'),
+        backgroundColor: AppColors.success,
+        behavior: SnackBarBehavior.floating,
+      ));
     } else {
       setState(() => _couponLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(couponProvider.error ?? 'Invalid or expired coupon'),
-          backgroundColor: AppColors.danger,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(couponProvider.error ?? 'Invalid or expired coupon'),
+        backgroundColor: AppColors.danger,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
@@ -168,24 +157,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return double.tryParse(v.toString()) ?? 0.0;
   }
 
-  // ─── Countdown helpers ────────────────────────────────────────────────────
   void _startCountdown(DateTime expiresAt) {
     _paymentExpiry = expiresAt;
     _countdownTimer?.cancel();
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
-      final remaining =
-          _paymentExpiry?.difference(DateTime.now()) ?? Duration.zero;
-      if (remaining.isNegative) {
-        _stopCountdown();
-        return;
-      }
+      final remaining = _paymentExpiry?.difference(DateTime.now()) ?? Duration.zero;
+      if (remaining.isNegative) { _stopCountdown(); return; }
       setState(() {
-        final minutes =
-            remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
-        final seconds =
-            remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
-        _countdownText = '$minutes:$seconds';
+        final m = remaining.inMinutes.remainder(60).toString().padLeft(2, '0');
+        final s = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
+        _countdownText = '$m:$s';
       });
     });
   }
@@ -197,54 +179,41 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => _countdownText = null);
   }
 
-  // ─── Place order ──────────────────────────────────────────────────────────
   Future<void> _placeOrder() async {
     if (!_useSavedAddress && !_formKey.currentState!.validate()) return;
     if (_useSavedAddress && _selectedAddress == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select a delivery address')),
-      );
+          const SnackBar(content: Text('Please select a delivery address')));
       return;
     }
-
     setState(() => _loading = true);
     final cart = context.read<CartProvider>();
     final auth = context.read<AuthProvider>();
 
-    // ── Razorpay flow ────────────────────────────────────────────────────────
     if (_paymentMethod == 'razorpay_upi') {
       final user = auth.user;
-
       Map<String, dynamic> initiateRes;
       try {
         initiateRes = await RazorpayService.instance.initiate(
-          shippingAddressId: (_useSavedAddress && _selectedAddress != null)
-              ? _selectedAddress!.id
-              : null,
-          shippingAddress: (!_useSavedAddress)
-              ? {
-                  'fullName': _nameCtrl.text.trim(),
-                  'phone': _phoneCtrl.text.trim(),
-                  'addressLine1': _addressCtrl.text.trim(),
-                  'city': _cityCtrl.text.trim(),
-                  'state': _stateCtrl.text.trim(),
-                  'postalCode': _pincodeCtrl.text.trim(),
-                  'country': 'IN',
-                }
-              : null,
+          shippingAddressId: (_useSavedAddress && _selectedAddress != null) ? _selectedAddress!.id : null,
+          shippingAddress: (!_useSavedAddress) ? {
+            'fullName': _nameCtrl.text.trim(),
+            'phone': _phoneCtrl.text.trim(),
+            'addressLine1': _addressCtrl.text.trim(),
+            'city': _cityCtrl.text.trim(),
+            'state': _stateCtrl.text.trim(),
+            'postalCode': _pincodeCtrl.text.trim(),
+            'country': 'IN',
+          } : null,
           couponCode: _appliedCouponCode,
           couponId: _appliedCouponId,
         );
       } catch (e) {
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(e is ApiException
-                ? e.message
-                : 'Could not start payment. Try again.'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e is ApiException ? e.message : 'Could not start payment. Try again.'),
+          backgroundColor: AppColors.danger,
+        ));
         setState(() => _loading = false);
         return;
       }
@@ -255,15 +224,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final razorpayOrderId = initiateRes['razorpayOrderId']?.toString() ?? '';
       final appOrderId = initiateRes['appOrderId']?.toString() ?? '';
       final expiresAtStr = initiateRes['expiresAt']?.toString();
-
-      if (expiresAtStr != null) {
-        _startCountdown(DateTime.parse(expiresAtStr));
-      }
+      if (expiresAtStr != null) _startCountdown(DateTime.parse(expiresAtStr));
 
       final sdkResult = await RazorpayService.instance.openCheckout(
-        key: rzpKey,
-        amount: rzpAmount,
-        currency: rzpCurrency,
+        key: rzpKey, amount: rzpAmount, currency: rzpCurrency,
         razorpayOrderId: razorpayOrderId,
         name: user?.name ?? _nameCtrl.text.trim(),
         email: user?.email ?? '',
@@ -274,20 +238,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
       if (sdkResult['success'] != true) {
         if (appOrderId.isNotEmpty) {
-          RazorpayService.instance
-              .cancel(appOrderId: appOrderId)
-              .catchError((err) {
+          RazorpayService.instance.cancel(appOrderId: appOrderId).catchError((err) {
             debugPrint('[Checkout] Failed to auto-cancel order: $err');
             return <String, dynamic>{};
           });
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(sdkResult['error'] ??
-                'Payment failed. Your cart is safe — try again.'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(sdkResult['error'] ?? 'Payment failed. Your cart is safe — try again.'),
+          backgroundColor: AppColors.danger,
+        ));
         setState(() => _loading = false);
         return;
       }
@@ -301,89 +260,67 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (!mounted) return;
 
       if (verifyRes['success'] != true) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text((verifyRes['error']?.toString().isNotEmpty == true)
-                ? verifyRes['error'].toString()
-                : (verifyRes['message']?.toString().isNotEmpty == true)
-                    ? verifyRes['message'].toString()
-                    : 'Payment verification failed'),
-            backgroundColor: AppColors.danger,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text((verifyRes['error']?.toString().isNotEmpty == true)
+              ? verifyRes['error'].toString()
+              : (verifyRes['message']?.toString().isNotEmpty == true)
+                  ? verifyRes['message'].toString()
+                  : 'Payment verification failed'),
+          backgroundColor: AppColors.danger,
+        ));
         setState(() => _loading = false);
         return;
       }
 
       if (mounted) {
         context.read<NotificationProvider>().addNotification(
-              title: 'Order Placed',
-              message:
-                  'Your Razorpay order of Rs\u00a0${cart.total.toStringAsFixed(0)} has been placed. We\u2019ll confirm it shortly.',
-              type: NoticeType.info,
-            );
+          title: 'Order Placed',
+          message: 'Your Razorpay order of Rs\u00a0${cart.total.toStringAsFixed(0)} has been placed. We\u2019ll confirm it shortly.',
+          type: NoticeType.info,
+        );
         LocalNotificationService.instance.showOrderNotification(
           title: 'Order Placed ✅',
-          body:
-              'Your order of ₹${cart.total.toStringAsFixed(0)} has been placed. We\'ll confirm it shortly!',
+          body: 'Your order of ₹${cart.total.toStringAsFixed(0)} has been placed. We\'ll confirm it shortly!',
         );
       }
-
       cart.reset();
-      setState(() {
-        _loading = false;
-        _success = true;
-      });
+      setState(() { _loading = false; _success = true; });
       await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return;
       Navigator.popUntil(context, (route) => route.isFirst);
       return;
     }
 
-    // ── COD flow ──────────────────────────────────────────────────────────────
     final orderProvider = context.read<OrderProvider>();
-    final success = await orderProvider.placeOrder(
-      orderPayload: _buildOrderPayload(_paymentMethod),
-    );
-
+    final success = await orderProvider.placeOrder(orderPayload: _buildOrderPayload(_paymentMethod));
     if (!success) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(orderProvider.error ?? 'Order failed')),
-      );
+          SnackBar(content: Text(orderProvider.error ?? 'Order failed')));
       setState(() => _loading = false);
       return;
     }
-
     if (mounted) {
       context.read<NotificationProvider>().addNotification(
-            title: 'Order Placed',
-            message:
-                'Your COD order of Rs\u00a0${cart.total.toStringAsFixed(0)} has been placed. We\u2019ll confirm it shortly.',
-            type: NoticeType.info,
-          );
+        title: 'Order Placed',
+        message: 'Your COD order of Rs\u00a0${cart.total.toStringAsFixed(0)} has been placed. We\u2019ll confirm it shortly.',
+        type: NoticeType.info,
+      );
       LocalNotificationService.instance.showOrderNotification(
         title: 'Order Placed ✅',
-        body:
-            'Your COD order of ₹${cart.total.toStringAsFixed(0)} has been placed. We\'ll confirm it shortly!',
+        body: 'Your COD order of ₹${cart.total.toStringAsFixed(0)} has been placed. We\'ll confirm it shortly!',
       );
     }
-
     cart.reset();
-    setState(() {
-      _loading = false;
-      _success = true;
-    });
+    setState(() { _loading = false; _success = true; });
     await Future.delayed(const Duration(seconds: 2));
     if (!mounted) return;
     Navigator.popUntil(context, (route) => route.isFirst);
   }
 
-  // ─── Build ────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     if (_success) return _buildSuccessView();
-
     final cart = context.watch<CartProvider>();
     final addrProvider = context.watch<AddressProvider>();
 
@@ -399,14 +336,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.all(16),
           children: [
-            // ── Delivery Address ─────────────────────────────────────────
+            // ── Delivery Address ──────────────────────────────────────────
             _buildSection(
               title: 'Delivery Address',
               icon: Icons.location_on_outlined,
               children: [
                 if (addrProvider.addresses.isNotEmpty) ...[
-                  ...addrProvider.addresses
-                      .map((addr) => _buildAddressOption(addr)),
+                  ...addrProvider.addresses.map((addr) => _buildAddressOption(addr)),
                   const SizedBox(height: 8),
                   const Divider(),
                 ],
@@ -416,37 +352,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   _buildNewAddressForm(),
                 ],
                 const SizedBox(height: 8),
-                // FIX: wrapped in SizedBox(width: double.infinity) so the
-                // button's `minimumSize: Size(double.infinity, 44)` gets a
-                // tight width constraint from its parent instead of the
-                // loose constraint a bare Column child provides. Without
-                // this wrapper, Flutter throws "BoxConstraints forces an
-                // infinite width", which breaks layout for the whole
-                // ListView and makes the entire page un-tappable.
+                // KEY FIX: SizedBox with fixed height, NO minimumSize on button
                 SizedBox(
                   width: double.infinity,
+                  height: 44,
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       final result = await Navigator.push<Address>(
                         context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              const AddressScreen(selectionMode: true),
-                        ),
+                        MaterialPageRoute(builder: (_) => const AddressScreen(selectionMode: true)),
                       );
                       if (result != null) {
-                        setState(() {
-                          _selectedAddress = result;
-                          _useSavedAddress = true;
-                        });
+                        setState(() { _selectedAddress = result; _useSavedAddress = true; });
                       }
                     },
-                    icon:
-                        const Icon(Icons.add_location_alt_outlined, size: 18),
+                    icon: const Icon(Icons.add_location_alt_outlined, size: 18),
                     label: const Text('Add New Address'),
-                    style: OutlinedButton.styleFrom(
-                      minimumSize: const Size(double.infinity, 44),
-                    ),
+                    // NO minimumSize here — SizedBox controls the size
                   ),
                 ),
               ],
@@ -463,14 +385,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   title: 'Cash on Delivery',
                   subtitle: 'Pay when you receive your order',
                   leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.local_shipping_outlined,
-                        color: AppColors.primary, size: 22),
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(color: AppColors.primaryBg, borderRadius: BorderRadius.circular(8)),
+                    child: const Icon(Icons.local_shipping_outlined, color: AppColors.primary, size: 22),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -479,23 +396,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   title: 'Razorpay',
                   subtitle: 'UPI, Cards, Net Banking',
                   leading: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryBg,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                    width: 40, height: 40,
+                    decoration: BoxDecoration(color: AppColors.primaryBg, borderRadius: BorderRadius.circular(8)),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(6),
                       child: Image.asset(
                         'assets/razorpay-logo.png',
-                        width: 28,
-                        height: 28,
-                        fit: BoxFit.contain,
+                        width: 28, height: 28, fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Icon(
                             Icons.account_balance_wallet_outlined,
-                            color: AppColors.primary,
-                            size: 22),
+                            color: AppColors.primary, size: 22),
                       ),
                     ),
                   ),
@@ -510,43 +420,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               icon: Icons.receipt_long_outlined,
               children: [
                 ...cart.items.map((item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${item.name} x ${item.quantity}',
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: AppColors.textSecondary),
-                            ),
-                          ),
-                          Text(
-                            'Rs ${item.price * item.quantity}',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.w600, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    )),
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(children: [
+                    Expanded(child: Text('${item.name} x ${item.quantity}',
+                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary))),
+                    Text('Rs ${item.price * item.quantity}',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                  ]),
+                )),
                 const Divider(),
                 _row('Subtotal', 'Rs ${cart.subtotal}'),
                 _row('Shipping', 'FREE', valueColor: AppColors.success),
                 if (_discountAmount != null && _discountAmount! > 0)
-                  _row(
-                    'Discount (${_appliedCouponCode ?? ''})',
-                    '- Rs ${_discountAmount!.toStringAsFixed(0)}',
-                    valueColor: AppColors.success,
-                  ),
+                  _row('Discount (${_appliedCouponCode ?? ''})',
+                      '- Rs ${_discountAmount!.toStringAsFixed(0)}',
+                      valueColor: AppColors.success),
                 const Divider(),
-                _row('Total', 'Rs ${cart.total.toStringAsFixed(0)}',
-                    isBold: true, fontSize: 16),
-                _row(
-                  'Amount to Pay',
-                  'Rs ${(_finalAmount ?? cart.total).toStringAsFixed(0)}',
-                  isBold: true,
-                  fontSize: 18,
-                ),
+                _row('Total', 'Rs ${cart.total.toStringAsFixed(0)}', isBold: true, fontSize: 16),
+                _row('Amount to Pay',
+                    'Rs ${(_finalAmount ?? cart.total).toStringAsFixed(0)}',
+                    isBold: true, fontSize: 18),
               ],
             ),
             const SizedBox(height: 16),
@@ -557,130 +450,93 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               icon: Icons.local_offer_outlined,
               children: [
                 if (_appliedCouponCode == null) ...[
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _couponCtrl,
-                          enabled: !_couponLoading,
-                          textCapitalization: TextCapitalization.characters,
-                          decoration: InputDecoration(
-                            hintText: 'Enter coupon code',
-                            hintStyle:
-                                const TextStyle(color: AppColors.textTertiary),
-                            border: OutlineInputBorder(
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _couponCtrl,
+                        enabled: !_couponLoading,
+                        textCapitalization: TextCapitalization.characters,
+                        decoration: InputDecoration(
+                          hintText: 'Enter coupon code',
+                          hintStyle: const TextStyle(color: AppColors.textTertiary),
+                          border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide:
-                                  const BorderSide(color: AppColors.border),
-                            ),
-                            enabledBorder: OutlineInputBorder(
+                              borderSide: const BorderSide(color: AppColors.border)),
+                          enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
-                              borderSide:
-                                  const BorderSide(color: AppColors.border),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 14, vertical: 12),
-                            isDense: true,
-                          ),
-                          onSubmitted: (_) => _applyCoupon(),
+                              borderSide: const BorderSide(color: AppColors.border)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          isDense: true,
                         ),
+                        onSubmitted: (_) => _applyCoupon(),
                       ),
-                      const SizedBox(width: 10),
-                      SizedBox(
-                        height: 46,
-                        child: FilledButton(
-                          onPressed: _couponLoading ? null : _applyCoupon,
-                          style: FilledButton.styleFrom(
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: _couponLoading
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                      strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Text('Apply'),
+                    ),
+                    const SizedBox(width: 10),
+                    SizedBox(
+                      height: 46,
+                      child: FilledButton(
+                        onPressed: _couponLoading ? null : _applyCoupon,
+                        style: FilledButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                         ),
+                        child: _couponLoading
+                            ? const SizedBox(width: 16, height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Text('Apply'),
                       ),
-                    ],
-                  ),
+                    ),
+                  ]),
                   const SizedBox(height: 10),
                   InkWell(
-                    onTap: () => Navigator.pushNamed(context, '/coupons'),
+                    onTap: () async {
+                      final result = await Navigator.pushNamed(context, '/coupons', arguments: true);
+                      if (result is String && result.isNotEmpty) {
+                        _couponCtrl.text = result;
+                        _applyCoupon();
+                      }
+                    },
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: AppColors.primaryBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
+                          color: AppColors.primaryBg, borderRadius: BorderRadius.circular(8)),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.card_giftcard_outlined,
-                              size: 16, color: AppColors.primary),
+                          Icon(Icons.card_giftcard_outlined, size: 16, color: AppColors.primary),
                           SizedBox(width: 6),
-                          Text(
-                            'Browse available coupons',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          Text('Browse available coupons',
+                              style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
                   ),
                 ] else ...[
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: AppColors.successLight,
                       borderRadius: BorderRadius.circular(10),
-                      border:
-                          Border.all(color: AppColors.success.withOpacity(0.3)),
+                      border: Border.all(color: AppColors.success.withOpacity(0.3)),
                     ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.check_circle,
-                            color: AppColors.success, size: 18),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _appliedCouponCode!,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 14,
-                                  color: AppColors.success,
-                                ),
-                              ),
-                              Text(
-                                'You save Rs ${_discountAmount?.toStringAsFixed(0) ?? '0'}',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.success,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: _removeCoupon,
-                          icon: const Icon(Icons.close,
-                              color: AppColors.success, size: 18),
-                          tooltip: 'Remove coupon',
-                        ),
-                      ],
-                    ),
+                    child: Row(children: [
+                      const Icon(Icons.check_circle, color: AppColors.success, size: 18),
+                      const SizedBox(width: 10),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(_appliedCouponCode!,
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.success)),
+                          Text('You save Rs ${_discountAmount?.toStringAsFixed(0) ?? '0'}',
+                              style: const TextStyle(fontSize: 12, color: AppColors.success)),
+                        ],
+                      )),
+                      IconButton(
+                        onPressed: _removeCoupon,
+                        icon: const Icon(Icons.close, color: AppColors.success, size: 18),
+                        tooltip: 'Remove coupon',
+                      ),
+                    ]),
                   ),
                 ],
               ],
@@ -691,65 +547,46 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             if (_countdownText != null)
               Container(
                 margin: const EdgeInsets.only(bottom: 12),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 decoration: BoxDecoration(
                   color: Colors.orange.shade50,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: Colors.orange.shade200),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.timer_outlined,
-                        color: Colors.orange, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Payment expires in $_countdownText',
-                      style: const TextStyle(
-                          color: Colors.orange,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13),
-                    ),
-                  ],
-                ),
+                child: Row(children: [
+                  const Icon(Icons.timer_outlined, color: Colors.orange, size: 18),
+                  const SizedBox(width: 8),
+                  Text('Payment expires in $_countdownText',
+                      style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.w600, fontSize: 13)),
+                ]),
               ),
 
             // ── Place Order button ─────────────────────────────────────────
+            // KEY FIX: SizedBox with fixed height, NO minimumSize: Size(double.infinity) on button
             SizedBox(
               width: double.infinity,
               height: 52,
               child: FilledButton.icon(
                 onPressed: _loading ? null : _placeOrder,
                 icon: _loading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2.5, color: Colors.white),
-                      )
+                    ? const SizedBox(width: 18, height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
                     : Icon(
                         _paymentMethod == 'razorpay_upi'
                             ? Icons.account_balance_wallet_outlined
                             : Icons.check_circle_outline,
-                        size: 20,
-                      ),
+                        size: 20),
                 label: Text(
                   _loading
                       ? (_paymentMethod == 'razorpay_upi'
-                          ? (_countdownText != null
-                              ? 'Waiting for payment...'
-                              : 'Initiating Razorpay...')
+                          ? (_countdownText != null ? 'Waiting for payment...' : 'Initiating Razorpay...')
                           : 'Placing Order...')
-                      : (_paymentMethod == 'razorpay_upi'
-                          ? 'Pay with Razorpay'
-                          : AppStrings.placeOrder),
+                      : (_paymentMethod == 'razorpay_upi' ? 'Pay with Razorpay' : AppStrings.placeOrder),
                   style: const TextStyle(fontSize: 16),
                 ),
+                // NO minimumSize: Size(double.infinity, ...) — causes infinite width in Column
                 style: FilledButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   backgroundColor: _paymentMethod == 'razorpay_upi'
                       ? const Color(0xFF072654)
                       : AppColors.primary,
@@ -763,15 +600,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     );
   }
 
-  // ─── Helper widgets ───────────────────────────────────────────────────────
-
   Widget _buildAddressOption(Address addr) {
     final isSelected = _useSavedAddress && _selectedAddress?.id == addr.id;
     return GestureDetector(
-      onTap: () => setState(() {
-        _selectedAddress = addr;
-        _useSavedAddress = true;
-      }),
+      onTap: () => setState(() { _selectedAddress = addr; _useSavedAddress = true; }),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(bottom: 8),
@@ -780,9 +612,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           color: isSelected ? AppColors.primaryBg : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? AppColors.primary.withOpacity(0.5)
-                : AppColors.border,
+            color: isSelected ? AppColors.primary.withOpacity(0.5) : AppColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -790,100 +620,46 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Container(
-              width: 20,
-              height: 20,
+              width: 20, height: 20,
               margin: const EdgeInsets.only(top: 2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.textMuted,
-                  width: 2,
-                ),
+                border: Border.all(color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2),
               ),
               child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    )
+                  ? Center(child: Container(width: 10, height: 10,
+                      decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary)))
                   : null,
             ),
             const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        addr.fullName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: AppColors.borderLight,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          addr.addressType.toUpperCase(),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textTertiary,
-                          ),
-                        ),
-                      ),
-                      if (addr.isDefault) ...[
-                        const SizedBox(width: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 1),
-                          decoration: BoxDecoration(
-                            color: AppColors.successLight,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Text(
-                            'DEFAULT',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.success,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
+            Expanded(child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(children: [
+                  Text(addr.fullName, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(4)),
+                    child: Text(addr.addressType.toUpperCase(),
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textTertiary)),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    addr.displayShort,
-                    style: const TextStyle(
-                      color: AppColors.textSecondary,
-                      fontSize: 13,
+                  if (addr.isDefault) ...[
+                    const SizedBox(width: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                      decoration: BoxDecoration(color: AppColors.successLight, borderRadius: BorderRadius.circular(4)),
+                      child: const Text('DEFAULT',
+                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.success)),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    addr.phone,
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
+                  ],
+                ]),
+                const SizedBox(height: 4),
+                Text(addr.displayShort, style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                const SizedBox(height: 2),
+                Text(addr.phone, style: const TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+              ],
+            )),
           ],
         ),
       ),
@@ -901,114 +677,78 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           color: isSelected ? AppColors.primaryBg : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? AppColors.primary.withOpacity(0.5)
-                : AppColors.border,
+            color: isSelected ? AppColors.primary.withOpacity(0.5) : AppColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.textMuted,
-                  width: 2,
-                ),
-              ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    )
-                  : null,
+        child: Row(children: [
+          Container(
+            width: 20, height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2),
             ),
-            const SizedBox(width: 12),
-            const Icon(Icons.add_location_alt_outlined,
-                color: AppColors.textSecondary, size: 20),
-            const SizedBox(width: 8),
-            const Text(
-              'Enter new address',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-            ),
-          ],
-        ),
+            child: isSelected
+                ? Center(child: Container(width: 10, height: 10,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary)))
+                : null,
+          ),
+          const SizedBox(width: 12),
+          const Icon(Icons.add_location_alt_outlined, color: AppColors.textSecondary, size: 20),
+          const SizedBox(width: 8),
+          const Text('Enter new address', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+        ]),
       ),
     );
   }
 
   Widget _buildNewAddressForm() {
-    return Column(
-      children: [
-        TextFormField(
-          controller: _nameCtrl,
-          decoration: const InputDecoration(
-            labelText: 'Full Name',
-            prefixIcon: Icon(Icons.person_outline, size: 20),
-          ),
+    return Column(children: [
+      TextFormField(
+        controller: _nameCtrl,
+        decoration: const InputDecoration(
+          labelText: 'Full Name', prefixIcon: Icon(Icons.person_outline, size: 20)),
+        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _phoneCtrl,
+        keyboardType: TextInputType.phone,
+        decoration: const InputDecoration(
+          labelText: 'Phone Number', prefixIcon: Icon(Icons.phone_outlined, size: 20)),
+        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      TextFormField(
+        controller: _addressCtrl,
+        maxLines: 2,
+        decoration: const InputDecoration(
+          labelText: 'Address', prefixIcon: Icon(Icons.location_on_outlined, size: 20),
+          alignLabelWithHint: true),
+        validator: (v) => v == null || v.isEmpty ? 'Required' : null,
+      ),
+      const SizedBox(height: 14),
+      Row(children: [
+        Expanded(child: TextFormField(
+          controller: _cityCtrl,
+          decoration: const InputDecoration(labelText: 'City'),
           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-        ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: _phoneCtrl,
-          keyboardType: TextInputType.phone,
-          decoration: const InputDecoration(
-            labelText: 'Phone Number',
-            prefixIcon: Icon(Icons.phone_outlined, size: 20),
-          ),
+        )),
+        const SizedBox(width: 12),
+        Expanded(child: TextFormField(
+          controller: _stateCtrl,
+          decoration: const InputDecoration(labelText: 'State'),
           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-        ),
-        const SizedBox(height: 14),
-        TextFormField(
-          controller: _addressCtrl,
-          maxLines: 2,
-          decoration: const InputDecoration(
-            labelText: 'Address',
-            prefixIcon: Icon(Icons.location_on_outlined, size: 20),
-            alignLabelWithHint: true,
-          ),
+        )),
+        const SizedBox(width: 12),
+        Expanded(child: TextFormField(
+          controller: _pincodeCtrl,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(labelText: 'Pincode'),
           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-        ),
-        const SizedBox(height: 14),
-        Row(
-          children: [
-            Expanded(
-              child: TextFormField(
-                controller: _cityCtrl,
-                decoration: const InputDecoration(labelText: 'City'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: _stateCtrl,
-                decoration: const InputDecoration(labelText: 'State'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextFormField(
-                controller: _pincodeCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Pincode'),
-                validator: (v) => v == null || v.isEmpty ? 'Required' : null,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+        )),
+      ]),
+    ]);
   }
 
   Widget _buildSection({
@@ -1022,39 +762,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 2))],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryBg,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: AppColors.primary, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Text(
-                title,
-                style: GoogleFonts.spaceGrotesk(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-            ],
-          ),
+          Row(children: [
+            Container(
+              width: 36, height: 36,
+              decoration: BoxDecoration(color: AppColors.primaryBg, borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: AppColors.primary, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(title, style: GoogleFonts.spaceGrotesk(
+                fontSize: 18, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          ]),
           const SizedBox(height: 18),
           ...children,
         ],
@@ -1078,66 +800,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           color: isSelected ? AppColors.primaryBg : Colors.white,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? AppColors.primary.withOpacity(0.5)
-                : AppColors.border,
+            color: isSelected ? AppColors.primary.withOpacity(0.5) : AppColors.border,
             width: isSelected ? 1.5 : 1,
           ),
         ),
-        child: Row(
-          children: [
-            Container(
-              width: 20,
-              height: 20,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: isSelected ? AppColors.primary : AppColors.textMuted,
-                  width: 2,
-                ),
-              ),
-              child: isSelected
-                  ? Center(
-                      child: Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    )
-                  : null,
+        child: Row(children: [
+          Container(
+            width: 20, height: 20,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: isSelected ? AppColors.primary : AppColors.textMuted, width: 2),
             ),
-            const SizedBox(width: 12),
-            leading,
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      color: isSelected
-                          ? AppColors.textPrimary
-                          : AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    style: const TextStyle(
-                      color: AppColors.textTertiary,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
+            child: isSelected
+                ? Center(child: Container(width: 10, height: 10,
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: AppColors.primary)))
+                : null,
+          ),
+          const SizedBox(width: 12),
+          leading,
+          const SizedBox(width: 12),
+          Expanded(child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? AppColors.textPrimary : AppColors.textSecondary)),
+              const SizedBox(height: 2),
+              Text(subtitle, style: const TextStyle(color: AppColors.textTertiary, fontSize: 12)),
+            ],
+          )),
+        ]),
       ),
     );
   }
@@ -1149,20 +841,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                color:
-                    isBold ? AppColors.textPrimary : AppColors.textSecondary,
-                fontWeight: isBold ? FontWeight.w800 : FontWeight.w500,
-                fontSize: fontSize,
-              )),
-          Text(value,
-              style: TextStyle(
-                color: valueColor ??
-                    (isBold ? AppColors.primary : AppColors.textPrimary),
-                fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-                fontSize: fontSize,
-              )),
+          Text(label, style: TextStyle(
+            color: isBold ? AppColors.textPrimary : AppColors.textSecondary,
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w500,
+            fontSize: fontSize,
+          )),
+          Text(value, style: TextStyle(
+            color: valueColor ?? (isBold ? AppColors.primary : AppColors.textPrimary),
+            fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+            fontSize: fontSize,
+          )),
         ],
       ),
     );
@@ -1175,36 +863,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            ScaleIn(
-              child: Container(
-                width: 110,
-                height: 110,
-                decoration: const BoxDecoration(
-                  color: AppColors.successLight,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.check_circle,
-                  color: AppColors.success,
-                  size: 64,
-                ),
-              ),
-            ),
+            ScaleIn(child: Container(
+              width: 110, height: 110,
+              decoration: const BoxDecoration(color: AppColors.successLight, shape: BoxShape.circle),
+              child: const Icon(Icons.check_circle, color: AppColors.success, size: 64),
+            )),
             const SizedBox(height: 24),
-            Text(
-              AppStrings.orderSuccess,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 24,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text(AppStrings.orderSuccess,
+                style: GoogleFonts.spaceGrotesk(
+                    fontSize: 24, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                textAlign: TextAlign.center),
             const SizedBox(height: 8),
-            const Text(
-              'Redirecting to your orders...',
-              style: TextStyle(color: AppColors.textTertiary),
-            ),
+            const Text('Redirecting to your orders...',
+                style: TextStyle(color: AppColors.textTertiary)),
           ],
         ),
       ),

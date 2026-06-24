@@ -8,7 +8,8 @@ import '../../core/widgets/empty_state.dart';
 import '../../providers/coupon_provider.dart';
 import '../../data/models.dart';
 class CouponsScreen extends StatefulWidget {
-  const CouponsScreen({super.key});
+  final bool selectMode;
+  const CouponsScreen({super.key, this.selectMode = false});
   @override
   State<CouponsScreen> createState() => _CouponsScreenState();
 }
@@ -94,11 +95,17 @@ class _CouponsScreenState extends State<CouponsScreen> {
             child: _CouponCard(
               coupon: coupon,
               onApply: coupon.usable && !coupon.isUsed
-                  ? () => Navigator.pushNamed(
-                        context,
-                        '/checkout',
-                        arguments: {'couponCode': coupon.code},
-                      )
+                  ? () {
+                      if (widget.selectMode) {
+                        Navigator.pop(context, coupon.code);
+                      } else {
+                        Navigator.pushNamed(
+                          context,
+                          '/checkout',
+                          arguments: {'couponCode': coupon.code},
+                        );
+                      }
+                    }
                   : null,
             ),
           );
